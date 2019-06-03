@@ -34,7 +34,7 @@
 #include <SoapySDR/Logger.h>
 #include <Types.h>
 
-#define HAVE_ASYNC_THREAD 1
+#define HAVE_ASYNC_THREAD 0
 
 #define USE_TX_MTU 0
 #define SET_RF_BW 1
@@ -570,18 +570,7 @@ double rf_soapy_set_rx_srate(void *h, double rate)
 {
   rf_soapy_handler_t *handler = (rf_soapy_handler_t*) h;
 
-  // Restart streaming, as the Lime seems to have problems reconfiguring the sample rate during streaming
-  bool rx_stream_active = handler->rx_stream_active;
-  if (rx_stream_active) {
-    rf_soapy_stop_rx_stream(handler);
-  }
-
   for (uint32_t i = 0; i < handler->num_rx_channels; i++) {
-    if (SoapySDRDevice_setSampleRate(handler->device, SOAPY_SDR_RX, i, rate) != 0) {
-      printf("setSampleRate Rx fail: %s\n", SoapySDRDevice_lastError());
-      return SRSLTE_ERROR;
-    }
-
 #if SET_RF_BW
     // Set bandwidth close to current rate
     size_t         bw_length;
@@ -589,17 +578,16 @@ double rf_soapy_set_rx_srate(void *h, double rate)
     double         bw       = rate * 0.75;
     bw                      = SRSLTE_MIN(bw, bw_range->maximum);
     bw                      = SRSLTE_MAX(bw, bw_range->minimum);
-    bw                      = SRSLTE_MAX(bw, 2.5e6); // For the Lime to avoid warnings
     if (SoapySDRDevice_setBandwidth(handler->device, SOAPY_SDR_RX, i, bw) != 0) {
       printf("setBandwidth fail: %s\n", SoapySDRDevice_lastError());
       return SRSLTE_ERROR;
     }
     printf("Set Rx bandwidth to %.2f MHz\n", SoapySDRDevice_getBandwidth(handler->device, SOAPY_SDR_RX, i) / 1e6);
 #endif
-  }
-
-  if (rx_stream_active) {
-    rf_soapy_start_rx_stream(handler, true);
+    if (SoapySDRDevice_setSampleRate(handler->device, SOAPY_SDR_RX, i, rate) != 0) {
+      printf("setSampleRate Rx fail: %s\n", SoapySDRDevice_lastError());
+      return SRSLTE_ERROR;
+    }
   }
 
   // retrun sample rate of first channel
@@ -610,18 +598,7 @@ double rf_soapy_set_tx_srate(void *h, double rate)
 {
   rf_soapy_handler_t *handler = (rf_soapy_handler_t*) h;
 
-  // stop/start streaming during rate reconfiguration
-  bool rx_stream_active = handler->rx_stream_active;
-  if (handler->rx_stream_active) {
-    rf_soapy_stop_rx_stream(handler);
-  }
-
   for (uint32_t i = 0; i < handler->num_tx_channels; i++) {
-    if (SoapySDRDevice_setSampleRate(handler->device, SOAPY_SDR_TX, i, rate) != 0) {
-      printf("setSampleRate Tx fail: %s\n", SoapySDRDevice_lastError());
-      return SRSLTE_ERROR;
-    }
-
 #if SET_RF_BW
     size_t         bw_length;
     SoapySDRRange* bw_range = SoapySDRDevice_getBandwidthRange(handler->device, SOAPY_SDR_TX, i, &bw_length);
@@ -636,9 +613,10 @@ double rf_soapy_set_tx_srate(void *h, double rate)
     }
     printf("Set Tx bandwidth to %.2f MHz\n", SoapySDRDevice_getBandwidth(handler->device, SOAPY_SDR_TX, i) / 1e6);
 #endif
-  }
-  if (rx_stream_active) {
-    rf_soapy_start_rx_stream(handler, true);
+    if (SoapySDRDevice_setSampleRate(handler->device, SOAPY_SDR_TX, i, rate) != 0) {
+      printf("setSampleRate Tx fail: %s\n", SoapySDRDevice_lastError());
+      return SRSLTE_ERROR;
+    }
   }
 
   handler->tx_rate = SoapySDRDevice_getSampleRate(handler->device, SOAPY_SDR_TX, 0);
